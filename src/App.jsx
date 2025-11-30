@@ -3,7 +3,7 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x977022C8aA02C8a9030629cE60f4F03Dac60092f" // New Sepolia address
+const CONTRACT_ADDRESS = "0x8a048c5Ee2570Bb40f7d0960B3E50f59bC699B62" // New Sepolia address (1 min, auto-distribute)
 const SEPOLIA_CHAIN_ID = "0xaa36a7"
 
 function App() {
@@ -41,7 +41,6 @@ function App() {
         if (remaining <= 0) {
           setTimeLeft(0)
           clearInterval(timerRef.current)
-          // Optionally fetch state to confirm end
           fetchGameState()
         } else {
           setTimeLeft(remaining)
@@ -82,6 +81,7 @@ function App() {
         jackpotContract.on("Deposit", () => fetchGameState())
         jackpotContract.on("WinnersPaid", () => fetchGameState())
         jackpotContract.on("GameStarted", () => fetchGameState())
+        jackpotContract.on("GameSettled", () => fetchGameState())
 
       } catch (error) {
         console.error("Error connecting wallet:", error)
@@ -106,7 +106,6 @@ function App() {
       setIsEnded(gameEnded)
       setEndTime(endTimestamp)
 
-      // If contract says time is up (tLeft == 0), trust it
       if (tLeft === 0) {
         setTimeLeft(0)
       }
@@ -134,26 +133,12 @@ function App() {
     if (!contract) return
     setIsLoading(true)
     try {
-      const tx = await contract.touch({ value: 50000 }) // 50000 wei
+      // If time is up, this call will trigger distribution and refund the amount
+      const tx = await contract.touch({ value: 50000 })
       await tx.wait()
       fetchGameState()
     } catch (error) {
       console.error("Error touching:", error)
-      alert("Error: " + (error.reason || error.message))
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleDistribute = async () => {
-    if (!contract) return
-    setIsLoading(true)
-    try {
-      const tx = await contract.pickWinner()
-      await tx.wait()
-      fetchGameState()
-    } catch (error) {
-      console.error("Error distributing:", error)
       alert("Error: " + (error.reason || error.message))
     } finally {
       setIsLoading(false)
@@ -178,11 +163,11 @@ function App() {
         ) : (
           <div className="game-content">
             <div className="timer-section">
-              <div className={`timer-display ${timeLeft < 60 ? 'critical' : ''}`}>
+              <div className={`timer-display ${timeLeft < 15 ? 'critical' : ''}`}>
                 {formatTime(timeLeft)}
               </div>
               <p className="timer-label">TIME REMAINING</p>
-              {timeLeft < 60 && timeLeft > 0 && (
+              {timeLeft < 15 && timeLeft > 0 && (
                 <p className="extension-notice">⚡ EXTENSION ZONE ACTIVE (+3s/tx) ⚡</p>
               )}
             </div>
@@ -202,23 +187,13 @@ function App() {
 
             <div className="action-section">
               {!isEnded ? (
-                timeLeft > 0 ? (
-                  <button
-                    onClick={handleTouch}
-                    className="action-btn touch-btn"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "PROCESSING..." : "DEPOSIT (50000 wei)"}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleDistribute}
-                    className="action-btn distribute-btn"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "DISTRIBUTING..." : "DISTRIBUTE POT"}
-                  </button>
-                )
+                <button
+                  onClick={handleTouch}
+                  className={`action-btn ${timeLeft === 0 ? 'distribute-btn' : 'touch-btn'}`}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "PROCESSING..." : (timeLeft === 0 ? "SETTLE GAME (REFUNDED)" : "DEPOSIT (50000 wei)")}
+                </button>
               ) : (
                 <div className="game-over">
                   <h2>GAME OVER</h2>
