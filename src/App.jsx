@@ -3,67 +3,54 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x9edeffd1317E0Cf06238B0e5124d6FfD597D521F" // Sepolia address
+const CONTRACT_ADDRESS = "0x977022C8aA02C8a9030629cE60f4F03Dac60092f" // New Sepolia address
 const SEPOLIA_CHAIN_ID = "0xaa36a7"
-
 
 function App() {
   const [account, setAccount] = useState(null)
   const [contract, setContract] = useState(null)
   const [timeLeft, setTimeLeft] = useState(0)
-  const [elapsedTime, setElapsedTime] = useState(0)
   const [players, setPlayers] = useState([])
   const [jackpot, setJackpot] = useState("0")
   const [isEnded, setIsEnded] = useState(false)
-  const [criticalTouches, setCriticalTouches] = useState(0)
-  const [winner, setWinner] = useState(null)
+  const [endTime, setEndTime] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const endTimeRef = useRef(null)
-  const startTimeRef = useRef(null)
-  const localTimerRef = useRef(null)
+  const timerRef = useRef(null)
 
   useEffect(() => {
     connectWallet()
   }, [])
 
-  // Sync with contract every 5 seconds
   useEffect(() => {
     if (contract) {
-      fetchGameState() // Initial fetch
+      fetchGameState()
       const interval = setInterval(fetchGameState, 5000)
       return () => clearInterval(interval)
     }
   }, [contract])
 
-  // Local timer that updates every second
+  // Local countdown timer
   useEffect(() => {
-    if (endTimeRef.current && startTimeRef.current) {
-      if (localTimerRef.current) {
-        clearInterval(localTimerRef.current)
-      }
+    if (endTime > 0 && !isEnded) {
+      if (timerRef.current) clearInterval(timerRef.current)
 
-      localTimerRef.current = setInterval(() => {
+      timerRef.current = setInterval(() => {
         const now = Math.floor(Date.now() / 1000)
-        const remaining = endTimeRef.current - now
-        const elapsed = now - startTimeRef.current
-
+        const remaining = endTime - now
         if (remaining <= 0) {
           setTimeLeft(0)
-          setElapsedTime(600) // 10 minutes
-          clearInterval(localTimerRef.current)
+          clearInterval(timerRef.current)
+          // Optionally fetch state to confirm end
+          fetchGameState()
         } else {
           setTimeLeft(remaining)
-          setElapsedTime(elapsed >= 0 ? elapsed : 0)
         }
       }, 1000)
 
-      return () => {
-        if (localTimerRef.current) {
-          clearInterval(localTimerRef.current)
-        }
-      }
+      return () => clearInterval(timerRef.current)
     }
-  }, [endTimeRef.current, startTimeRef.current])
+  }, [endTime, isEnded])
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -76,7 +63,6 @@ function App() {
               params: [{ chainId: SEPOLIA_CHAIN_ID }],
             })
           } catch (switchError) {
-            // This error code indicates that the chain has not been added to MetaMask.
             if (switchError.code === 4902) {
               alert("Please add Sepolia network to your MetaMask")
             } else {
@@ -93,14 +79,9 @@ function App() {
         const jackpotContract = new ethers.Contract(CONTRACT_ADDRESS, JackpotABI.abi, signer)
         setContract(jackpotContract)
 
-        // Listen for events
-        jackpotContract.on("Touched", (player, newEndTime, touches) => {
-          fetchGameState()
-        })
-        jackpotContract.on("WinnerPicked", (winnerAddr, amount) => {
-          setWinner(winnerAddr)
-          setIsEnded(true)
-        })
+        jackpotContract.on("Deposit", () => fetchGameState())
+        jackpotContract.on("WinnersPaid", () => fetchGameState())
+        jackpotContract.on("GameStarted", () => fetchGameState())
 
       } catch (error) {
         console.error("Error connecting wallet:", error)
@@ -111,37 +92,23 @@ function App() {
   const fetchGameState = async () => {
     if (!contract) return
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const currentBlock = await provider.getBlock('latest')
-      const currentTimestamp = currentBlock.timestamp
-
+      // getGameState returns: (timeLeft, players, jackpot, isEnded, currentEndTime)
       const state = await contract.getGameState()
-      const contractEndTime = await contract.gameEndTime()
 
-      // Calculate actual end time
-      const endTime = Number(contractEndTime)
-      endTimeRef.current = endTime
+      const tLeft = Number(state[0])
+      const currentPlayers = state[1]
+      const currentJackpot = ethers.formatEther(state[2])
+      const gameEnded = state[3]
+      const endTimestamp = Number(state[4])
 
-      // Calculate start time (end time - 10 minutes)
-      const startTime = endTime - 600
-      startTimeRef.current = startTime
+      setPlayers(currentPlayers)
+      setJackpot(currentJackpot)
+      setIsEnded(gameEnded)
+      setEndTime(endTimestamp)
 
-      // Calculate time left and elapsed
-      const remaining = endTime - currentTimestamp
-      const elapsed = currentTimestamp - startTime
-      setTimeLeft(remaining > 0 ? remaining : 0)
-      setElapsedTime(elapsed >= 0 ? elapsed : 0)
-
-      setPlayers(state[1])
-      setJackpot(ethers.formatEther(state[2]))
-      setIsEnded(state[3])
-
-      const cTouches = await contract.criticalTouches()
-      setCriticalTouches(Number(cTouches))
-
-      if (state[3]) {
-        const w = await contract.winner()
-        if (w !== ethers.ZeroAddress) setWinner(w)
+      // If contract says time is up (tLeft == 0), trust it
+      if (tLeft === 0) {
+        setTimeLeft(0)
       }
     } catch (error) {
       console.error("Error fetching state:", error)
@@ -150,13 +117,31 @@ function App() {
 
   const handleTouch = async () => {
     if (!contract) return
+    setIsLoading(true)
     try {
-      const tx = await contract.touch({ value: 50000 })
+      const tx = await contract.touch({ value: 50000 }) // 50000 wei
       await tx.wait()
       fetchGameState()
     } catch (error) {
       console.error("Error touching:", error)
       alert("Error: " + (error.reason || error.message))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDistribute = async () => {
+    if (!contract) return
+    setIsLoading(true)
+    try {
+      const tx = await contract.pickWinner()
+      await tx.wait()
+      fetchGameState()
+    } catch (error) {
+      console.error("Error distributing:", error)
+      alert("Error: " + (error.reason || error.message))
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -167,47 +152,87 @@ function App() {
   }
 
   return (
-    <div className="container">
-      <h1>🍑 Jackpot 🍑</h1>
+    <div className="app-container">
+      <div className="glass-panel">
+        <h1 className="title">💎 ETHER JACKPOT 💎</h1>
 
-      {!account ? (
-        <button onClick={connectWallet} className="connect-btn">Connect Wallet</button>
-      ) : (
-        <div className="game-interface">
-          <div className="timer-box">
-            <h2>Elapsed Time</h2>
-            <div className={`timer ${elapsedTime >= 540 ? 'critical' : ''}`}>
-              {formatTime(elapsedTime)}
+        {!account ? (
+          <button onClick={connectWallet} className="connect-btn">
+            Connect Wallet
+          </button>
+        ) : (
+          <div className="game-content">
+            <div className="timer-section">
+              <div className={`timer-display ${timeLeft < 60 ? 'critical' : ''}`}>
+                {formatTime(timeLeft)}
+              </div>
+              <p className="timer-label">TIME REMAINING</p>
+              {timeLeft < 60 && timeLeft > 0 && (
+                <p className="extension-notice">⚡ EXTENSION ZONE ACTIVE (+3s/tx) ⚡</p>
+              )}
             </div>
-            {elapsedTime >= 540 && <p className="decay-info">Critical Zone! (+3s per touch)</p>}
-          </div>
 
-          <div className="jackpot-info">
-            <h3>Jackpot: {jackpot} ETH</h3>
-            <p>Critical Touches: {criticalTouches}</p>
-          </div>
-
-          {!isEnded ? (
-            <button onClick={handleTouch} className="touch-btn">
-              TOUCH (50000 wei)
-            </button>
-          ) : (
-            <div className="winner-box">
-              <h2>GAME OVER</h2>
-              <p>Winner: {winner}</p>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <h3>TOTAL POT</h3>
+                <p className="stat-value">{jackpot} ETH</p>
+              </div>
+              <div className="stat-card">
+                <h3>PAYOUT / PLAYER</h3>
+                <p className="stat-value">
+                  {players.length > 0 ? (Number(jackpot) / Math.min(players.length, 5)).toFixed(6) : "0.0"} ETH
+                </p>
+              </div>
             </div>
-          )}
 
-          <div className="players-list">
-            <h3>Last 5 Players</h3>
-            <ul>
-              {players.map((p, i) => (
-                <li key={i}>{p.slice(0, 6)}...{p.slice(-4)}</li>
-              ))}
-            </ul>
+            <div className="action-section">
+              {!isEnded ? (
+                timeLeft > 0 ? (
+                  <button
+                    onClick={handleTouch}
+                    className="action-btn touch-btn"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "PROCESSING..." : "DEPOSIT (50000 wei)"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleDistribute}
+                    className="action-btn distribute-btn"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "DISTRIBUTING..." : "DISTRIBUTE POT"}
+                  </button>
+                )
+              ) : (
+                <div className="game-over">
+                  <h2>GAME OVER</h2>
+                  <p>Pot Distributed to Winners</p>
+                </div>
+              )}
+            </div>
+
+            <div className="players-section">
+              <h3>🏆 LAST 5 DEPOSITORS (WINNERS) 🏆</h3>
+              <div className="players-list">
+                {players.length === 0 ? (
+                  <p className="no-players">No deposits yet</p>
+                ) : (
+                  [...players].reverse().map((p, i) => (
+                    <div key={i} className="player-row">
+                      <span className="player-rank">#{players.length - i}</span>
+                      <span className="player-addr">
+                        {p.slice(0, 6)}...{p.slice(-4)}
+                        {p.toLowerCase() === account.toLowerCase() && " (YOU)"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
