@@ -115,6 +115,21 @@ function App() {
     }
   }
 
+  const handleStartGame = async () => {
+    if (!contract) return
+    setIsLoading(true)
+    try {
+      const tx = await contract.startGame()
+      await tx.wait()
+      fetchGameState()
+    } catch (error) {
+      console.error("Error starting game:", error)
+      alert("Error: " + (error.reason || error.message))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleTouch = async () => {
     if (!contract) return
     setIsLoading(true)
@@ -208,6 +223,13 @@ function App() {
                 <div className="game-over">
                   <h2>GAME OVER</h2>
                   <p>Pot Distributed to Winners</p>
+                  <button
+                    onClick={handleStartGame}
+                    className="action-btn start-btn"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "STARTING..." : "START NEW GAME"}
+                  </button>
                 </div>
               )}
             </div>
