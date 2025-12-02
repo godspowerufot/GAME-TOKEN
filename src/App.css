@@ -44,6 +44,7 @@ body {
   font-size: 2rem;
   font-weight: 800;
   background: linear-gradient(135deg, #fff 0%, #ccc 100%);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 32px;
@@ -65,6 +66,100 @@ body {
 .connect-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+}
+
+/* Contract Address Section */
+.contract-address-section {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 204, 255, 0.1) 100%);
+  border-radius: 16px;
+  border: 2px solid var(--primary);
+}
+
+.send-instruction {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  color: var(--primary);
+  text-align: center;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.address-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--glass-border);
+}
+
+.address-box:hover {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: var(--secondary);
+}
+
+.address-text {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: var(--text);
+  word-break: break-all;
+  flex: 1;
+}
+
+.copy-btn {
+  padding: 8px 16px;
+  background: var(--primary);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.copy-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+}
+
+.address-note {
+  margin: 12px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.round-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 8px 20px;
+  background: rgba(0, 255, 136, 0.1);
+  border-radius: 20px;
+  border: 1px solid var(--primary);
+}
+
+.round-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  font-weight: 600;
+}
+
+.round-number {
+  font-size: 1.2rem;
+  color: var(--primary);
+  font-weight: 700;
 }
 
 .timer-section {
@@ -90,6 +185,22 @@ body {
   font-size: 0.8rem;
   letter-spacing: 2px;
   margin-top: 8px;
+}
+
+.restart-notice {
+  color: var(--secondary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-top: 12px;
+  animation: pulse 2s infinite;
+}
+
+.waiting-notice {
+  color: #ffd700;
+  font-weight: 700;
+  font-size: 1rem;
+  margin-top: 12px;
+  animation: pulse 2s infinite;
 }
 
 .extension-notice {
@@ -251,4 +362,159 @@ body {
   50% {
     opacity: 0.5;
   }
+}
+
+/* Leaderboard Section */
+.leaderboard-section {
+  margin-top: 32px;
+  text-align: left;
+}
+
+.leaderboard-section h3 {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.leaderboard-table {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  overflow: hidden;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.leaderboard-table::-webkit-scrollbar {
+  width: 8px;
+}
+
+.leaderboard-table::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.leaderboard-table::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 4px;
+}
+
+.leaderboard-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.leaderboard-table th {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 12px 10px;
+  text-align: left;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.transaction-row {
+  border-bottom: 1px solid var(--glass-border);
+  transition: all 0.2s ease;
+}
+
+.transaction-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.transaction-row td {
+  padding: 12px 10px;
+  font-size: 0.85rem;
+}
+
+.tx-rank {
+  color: var(--text-dim);
+  font-weight: 600;
+  width: 50px;
+}
+
+.tx-addr {
+  color: var(--secondary);
+  font-family: monospace;
+}
+
+.tx-amount {
+  color: var(--primary);
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.tx-time {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.tx-round {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+/* Current Round Highlight */
+.transaction-row.current-round {
+  background: rgba(0, 255, 136, 0.05);
+  border-right: 3px solid var(--primary);
+}
+
+/* Top 5 Highlights */
+.transaction-row.top-1 {
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 215, 0, 0.05) 100%);
+  border-left: 4px solid #ffd700;
+}
+
+.transaction-row.top-1:hover {
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.3) 0%, rgba(255, 215, 0, 0.1) 100%);
+}
+
+.transaction-row.top-2 {
+  background: linear-gradient(90deg, rgba(192, 192, 192, 0.2) 0%, rgba(192, 192, 192, 0.05) 100%);
+  border-left: 4px solid #c0c0c0;
+}
+
+.transaction-row.top-2:hover {
+  background: linear-gradient(90deg, rgba(192, 192, 192, 0.3) 0%, rgba(192, 192, 192, 0.1) 100%);
+}
+
+.transaction-row.top-3 {
+  background: linear-gradient(90deg, rgba(205, 127, 50, 0.2) 0%, rgba(205, 127, 50, 0.05) 100%);
+  border-left: 4px solid #cd7f32;
+}
+
+.transaction-row.top-3:hover {
+  background: linear-gradient(90deg, rgba(205, 127, 50, 0.3) 0%, rgba(205, 127, 50, 0.1) 100%);
+}
+
+.transaction-row.top-4 {
+  background: linear-gradient(90deg, rgba(0, 204, 255, 0.2) 0%, rgba(0, 204, 255, 0.05) 100%);
+  border-left: 4px solid var(--secondary);
+}
+
+.transaction-row.top-4:hover {
+  background: linear-gradient(90deg, rgba(0, 204, 255, 0.3) 0%, rgba(0, 204, 255, 0.1) 100%);
+}
+
+.transaction-row.top-5 {
+  background: linear-gradient(90deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 255, 136, 0.05) 100%);
+  border-left: 4px solid var(--primary);
+}
+
+.transaction-row.top-5:hover {
+  background: linear-gradient(90deg, rgba(0, 255, 136, 0.3) 0%, rgba(0, 255, 136, 0.1) 100%);
+}
+
+.no-transactions {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-dim);
+  font-style: italic;
 }
