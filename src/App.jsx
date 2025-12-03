@@ -3,8 +3,8 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x98D9f8b835Af4b1925CC20dE4c6C6B53B512dCdA" // Direct-send contract (10 min timer)
-const SEPOLIA_RPC = "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161" // Public Infura RPC
+const CONTRACT_ADDRESS = "0x8408Ca9ab48E98ec0570218a106e4606f453c02E" // Direct-send contract (10 min timer)
+const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com" // Public RPC
 
 function App() {
   const [contract, setContract] = useState(null)
@@ -135,15 +135,29 @@ function App() {
           </div>
 
           <div className="timer-section">
-            <div className={`timer-display ${timeLeft < 60 ? 'critical' : ''}`}>
-              {formatTime(timeLeft)}
+            <div className={`timer-display ${timeLeft < 60 && endTime > 0 ? 'critical' : ''}`}>
+              {endTime === 0 ? "00:00" : formatTime(timeLeft)}
             </div>
-            <p className="timer-label">TIME REMAINING</p>
-            {timeLeft < 60 && timeLeft > 0 && (
+            <p className="timer-label">
+              {endTime === 0 ? "WAITING FOR FIRST PLAYER" : "TIME REMAINING"}
+            </p>
+
+            {/* Extension Notice */}
+            {timeLeft < 60 && timeLeft > 0 && endTime > 0 && (
               <p className="extension-notice">⚡ EXTENSION ZONE ACTIVE (+3s/tx) ⚡</p>
             )}
-            {timeLeft === 0 && (
-              <p className="waiting-notice">⏳ WAITING FOR PAYOUT...</p>
+
+            {/* Waiting for Trigger Notice */}
+            {timeLeft === 0 && endTime > 0 && (
+              <div className="waiting-notice-container">
+                <p className="waiting-notice">⏳ ROUND ENDED ⏳</p>
+                <p className="waiting-subtext">Next deposit will trigger payout & start new round!</p>
+              </div>
+            )}
+
+            {/* Idle Notice */}
+            {endTime === 0 && (
+              <p className="waiting-notice">🚀 SEND ETH TO START ROUND 1 🚀</p>
             )}
           </div>
 
@@ -178,8 +192,60 @@ function App() {
             </div>
           </div>
 
+          {/* New Top Depositors Leaderboard */}
           <div className="leaderboard-section">
-            <h3>📊 ALL TRANSACTIONS - ALL ROUNDS 📊</h3>
+            <h3>� TOP DEPOSITORS (ALL TIME) 👑</h3>
+            <div className="leaderboard-table">
+              {(() => {
+                // Aggregate deposits by player
+                const playerTotals = {};
+                allTransactions.forEach(tx => {
+                  const amount = parseFloat(tx.amount);
+                  if (playerTotals[tx.player]) {
+                    playerTotals[tx.player] += amount;
+                  } else {
+                    playerTotals[tx.player] = amount;
+                  }
+                });
+
+                // Convert to array and sort
+                const sortedPlayers = Object.entries(playerTotals)
+                  .map(([player, total]) => ({ player, total }))
+                  .sort((a, b) => b.total - a.total)
+                  .slice(0, 10); // Top 10
+
+                if (sortedPlayers.length === 0) {
+                  return <p className="no-transactions">No deposits yet</p>;
+                }
+
+                return (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Player</th>
+                        <th>Total Deposited</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedPlayers.map((p, i) => (
+                        <tr key={i} className={`transaction-row ${i < 3 ? `top-${i + 1}` : ''}`}>
+                          <td className="tx-rank">#{i + 1}</td>
+                          <td className="tx-addr">
+                            {p.player.slice(0, 6)}...{p.player.slice(-4)}
+                          </td>
+                          <td className="tx-amount">{p.total.toFixed(4)} ETH</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          </div>
+
+          <div className="leaderboard-section">
+            <h3>📊 TRANSACTION HISTORY 📊</h3>
             <div className="leaderboard-table">
               {allTransactions.length === 0 ? (
                 <p className="no-transactions">No transactions yet</p>
@@ -190,7 +256,7 @@ function App() {
                       <th>#</th>
                       <th>Round</th>
                       <th>Sender</th>
-                      <th>Amount (ETH)</th>
+                      <th>Amount</th>
                       <th>Time</th>
                     </tr>
                   </thead>
@@ -198,17 +264,15 @@ function App() {
                     {[...allTransactions].reverse().map((tx, i) => {
                       const rank = allTransactions.length - i
                       const isCurrentRound = tx.round === currentRound
-                      const isTopFive = i < 5
-                      const topFiveClass = isTopFive ? `top-${i + 1}` : ''
                       const currentRoundClass = isCurrentRound ? 'current-round' : ''
                       return (
-                        <tr key={i} className={`transaction-row ${topFiveClass} ${currentRoundClass}`}>
+                        <tr key={i} className={`transaction-row ${currentRoundClass}`}>
                           <td className="tx-rank">#{rank}</td>
                           <td className="tx-round">R{tx.round}</td>
                           <td className="tx-addr">
                             {tx.player.slice(0, 6)}...{tx.player.slice(-4)}
                           </td>
-                          <td className="tx-amount">{Number(tx.amount).toFixed(8)}</td>
+                          <td className="tx-amount">{Number(tx.amount).toFixed(4)}</td>
                           <td className="tx-time">{new Date(tx.timestamp * 1000).toLocaleTimeString()}</td>
                         </tr>
                       )
