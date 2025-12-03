@@ -3,8 +3,8 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x8408Ca9ab48E98ec0570218a106e4606f453c02E" // Direct-send contract (10 min timer)
-const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com" // Public RPC
+const CONTRACT_ADDRESS = "0x292f525A5Cc596CbfB6828157fAef7A0Ac04897F" // Direct-send contract (10 min timer)
+const SEPOLIA_RPC = "https://sepolia.infura.io/v3/ae6a607117bb46a3b601aece79638d75" // Public RPC
 
 function App() {
   const [contract, setContract] = useState(null)
@@ -15,6 +15,7 @@ function App() {
   const [allTransactions, setAllTransactions] = useState([])
   const [currentRound, setCurrentRound] = useState(1)
   const [copied, setCopied] = useState(false)
+  const [payoutHistory, setPayoutHistory] = useState([])
 
   const timerRef = useRef(null)
 
@@ -59,9 +60,16 @@ function App() {
 
       // Listen to events
       jackpotContract.on("Deposit", () => fetchGameState())
-      jackpotContract.on("WinnersPaid", () => fetchGameState())
+      jackpotContract.on("WinnersPaid", (winners, amountPerWinner, round) => {
+        console.log("WinnersPaid event:", { winners, amountPerWinner: ethers.formatEther(amountPerWinner), round: round.toString() })
+        fetchGameState()
+        fetchPayoutHistory()
+      })
       jackpotContract.on("RoundStarted", () => fetchGameState())
       jackpotContract.on("RoundEnded", () => fetchGameState())
+
+      // Fetch initial payout history
+      fetchPayoutHistory()
     } catch (error) {
       console.error("Error initializing contract:", error)
     }
@@ -98,6 +106,30 @@ function App() {
       setAllTransactions(formattedTxs)
     } catch (error) {
       console.error("Error fetching state:", error)
+    }
+  }
+
+  const fetchPayoutHistory = async () => {
+    if (!contract) return
+    try {
+      // Query WinnersPaid events from the contract
+      const filter = contract.filters.WinnersPaid()
+      const events = await contract.queryFilter(filter, 0, 'latest')
+
+      const payouts = events.map(event => ({
+        round: Number(event.args.round),
+        winners: event.args.winners,
+        amountPerWinner: ethers.formatEther(event.args.amountPerWinner),
+        blockNumber: event.blockNumber,
+        transactionHash: event.transactionHash
+      }))
+
+      // Sort by round descending (most recent first)
+      payouts.sort((a, b) => b.round - a.round)
+      setPayoutHistory(payouts)
+      console.log("Payout history:", payouts)
+    } catch (error) {
+      console.error("Error fetching payout history:", error)
     }
   }
 
@@ -277,6 +309,55 @@ function App() {
                         </tr>
                       )
                     })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Payout History Table */}
+          <div className="leaderboard-section">
+            <h3>💰 PAYOUT HISTORY 💰</h3>
+            <div className="leaderboard-table">
+              {payoutHistory.length === 0 ? (
+                <p className="no-transactions">No payouts yet</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Round</th>
+                      <th>Winners</th>
+                      <th>Amount/Winner</th>
+                      <th>Tx Hash</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutHistory.map((payout, i) => (
+                      <tr key={i} className="transaction-row">
+                        <td className="tx-round">R{payout.round}</td>
+                        <td className="tx-addr">
+                          {payout.winners.length} player{payout.winners.length > 1 ? 's' : ''}
+                          <div style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '4px' }}>
+                            {payout.winners.map((winner, j) => (
+                              <div key={j}>
+                                {winner.slice(0, 6)}...{winner.slice(-4)}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="tx-amount">{Number(payout.amountPerWinner).toFixed(4)} ETH</td>
+                        <td className="tx-time">
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${payout.transactionHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#4CAF50', textDecoration: 'none' }}
+                          >
+                            {payout.transactionHash.slice(0, 6)}...{payout.transactionHash.slice(-4)}
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}
