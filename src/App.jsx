@@ -3,7 +3,7 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x292f525A5Cc596CbfB6828157fAef7A0Ac04897F" // Direct-send contract (10 min timer)
+const CONTRACT_ADDRESS = "0x463d9494DE70839218d9641A38E28d1a01899c51" // With 10% deployer fee
 const SEPOLIA_RPC = "https://sepolia.infura.io/v3/ae6a607117bb46a3b601aece79638d75" // Public RPC
 
 function App() {
