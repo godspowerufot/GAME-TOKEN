@@ -3,16 +3,16 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x2a13772E7A6272536665cEBb6F5DB160A3533Fed" // Updated with dead zone timer logic
+const CONTRACT_ADDRESS = "0x740867512d21058de9D5F0806cDb4C5aEbaD32de" // Updated with upward-counting timer
 const SEPOLIA_RPC = "https://sepolia.infura.io/v3/ae6a607117bb46a3b601aece79638d75" // Public RPC
 
 function App() {
   const [contract, setContract] = useState(null)
-  const [elapsedTime, setElapsedTime] = useState(0)
+  const [elapsedTime, setElapsedTime] = useState(0) // Changed from timeLeft to elapsedTime
   const [players, setPlayers] = useState([])
   const [jackpot, setJackpot] = useState("0")
   const [endTime, setEndTime] = useState(0)
-  const [startTime, setStartTime] = useState(0)
+  const [startTime, setStartTime] = useState(0) // Track start time for local timer
   const [allTransactions, setAllTransactions] = useState([])
   const [currentRound, setCurrentRound] = useState(1)
   const [copied, setCopied] = useState(false)
@@ -32,29 +32,28 @@ function App() {
     }
   }, [contract])
 
-  // Local elapsed timer - counts up from 0, syncs with contract
+  // Local countdown timer - continuously running upward
   useEffect(() => {
-    if (startTime > 0) {
+    if (endTime > 0 && startTime > 0) {
       if (timerRef.current) clearInterval(timerRef.current)
 
       timerRef.current = setInterval(() => {
         const now = Math.floor(Date.now() / 1000)
-        const elapsed = now - startTime
 
-        // Check if game has ended
-        if (endTime > 0 && now >= endTime) {
-          setElapsedTime(endTime - startTime) // Show final elapsed time
+        if (now >= endTime) {
+          // Game ended, show max time (10:00)
+          setElapsedTime(600)
           fetchGameState()
         } else {
-          setElapsedTime(elapsed)
+          // Calculate elapsed time
+          const elapsed = now - startTime
+          setElapsedTime(Math.min(elapsed, 600)) // Cap at 10 minutes
         }
       }, 1000)
 
       return () => clearInterval(timerRef.current)
-    } else {
-      setElapsedTime(0)
     }
-  }, [startTime, endTime])
+  }, [endTime, startTime])
 
   const initContract = async () => {
     try {
@@ -85,25 +84,26 @@ function App() {
     try {
       const state = await contract.getGameState()
 
-      const contractElapsedTime = Number(state[0])
+      const elapsed = Number(state[0]) // Now returns elapsed time
       const currentPlayers = state[1]
       const currentJackpot = ethers.formatEther(state[2])
       const endTimestamp = Number(state[3])
       const round = Number(state[4])
-      const startTimestamp = Number(state[5])
 
       setPlayers(currentPlayers)
       setJackpot(currentJackpot)
       setEndTime(endTimestamp)
       setCurrentRound(round)
-      setStartTime(startTimestamp)
 
-      // Sync elapsed time with contract
-      if (startTimestamp > 0) {
-        setElapsedTime(contractElapsedTime)
+      // Calculate startTime from endTime (endTime = startTime + 600)
+      if (endTimestamp > 0) {
+        setStartTime(endTimestamp - 600)
       } else {
-        setElapsedTime(0)
+        setStartTime(0)
       }
+
+      // Set elapsed time from contract
+      setElapsedTime(elapsed)
 
       // Fetch all transactions
       const txs = await contract.getAllTransactions()
@@ -167,11 +167,6 @@ function App() {
     return `${m}:${s.toString().padStart(2, '0')}`
   }
 
-  // Check if currently in dead zone (9:00-9:59)
-  const isInDeadZone = () => {
-    return elapsedTime >= 540 && elapsedTime < 600 // 9:00 to 9:59
-  }
-
   return (
     <div className="app-container">
       <div className="glass-panel">
@@ -194,25 +189,20 @@ function App() {
           </div>
 
           <div className="timer-section">
-            <div className={`timer-display ${isInDeadZone() && startTime > 0 ? 'critical' : ''}`}>
-              {startTime === 0 ? "00:00" : formatTime(elapsedTime)}
+            <div className={`timer-display ${elapsedTime >= 540 && endTime > 0 ? 'critical' : ''}`}>
+              {endTime === 0 ? "00:00" : formatTime(elapsedTime)}
             </div>
             <p className="timer-label">
-              {startTime === 0 ? "WAITING FOR FIRST PLAYER" : "ELAPSED TIME"}
+              {endTime === 0 ? "WAITING FOR FIRST PLAYER" : "ELAPSED TIME"}
             </p>
 
-            {/* Dead Zone Notice - Active during 9:00-9:59 */}
-            {isInDeadZone() && startTime > 0 && (
-              <p className="extension-notice">💀 DEAD ZONE ACTIVE (9:00-9:59) 💀</p>
-            )}
-
-            {/* Show extended end time if in dead zone */}
-            {isInDeadZone() && startTime > 0 && endTime > startTime + 600 && (
-              <p className="waiting-subtext">Game will end at: {formatTime(endTime - startTime)}</p>
+            {/* Extension Notice - Active after 9 minutes (540 seconds elapsed) */}
+            {elapsedTime >= 540 && elapsedTime < 600 && endTime > 0 && (
+              <p className="extension-notice">⚡ DEAD ZONE ACTIVE (Resets: 9:03 → 9:06 → 9:09...) ⚡</p>
             )}
 
             {/* Waiting for Trigger Notice */}
-            {startTime > 0 && endTime > 0 && Math.floor(Date.now() / 1000) >= endTime && (
+            {elapsedTime >= 600 && endTime > 0 && (
               <div className="waiting-notice-container">
                 <p className="waiting-notice">⏳ ROUND ENDED ⏳</p>
                 <p className="waiting-subtext">Next deposit will trigger payout & start new round!</p>
@@ -220,7 +210,7 @@ function App() {
             )}
 
             {/* Idle Notice */}
-            {startTime === 0 && (
+            {endTime === 0 && (
               <p className="waiting-notice">🚀 SEND ETH TO START ROUND 1 🚀</p>
             )}
           </div>
