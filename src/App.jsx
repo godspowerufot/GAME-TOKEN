@@ -3,7 +3,7 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x740867512d21058de9D5F0806cDb4C5aEbaD32de" // Updated with upward-counting timer
+const CONTRACT_ADDRESS = "0xE12e600Dc819db49C21F986EEEE0986c6EEdedd1" // Updated with token validation
 const SEPOLIA_RPC = "https://sepolia.infura.io/v3/ae6a607117bb46a3b601aece79638d75" // Public RPC
 
 function App() {
@@ -17,6 +17,8 @@ function App() {
   const [currentRound, setCurrentRound] = useState(1)
   const [copied, setCopied] = useState(false)
   const [payoutHistory, setPayoutHistory] = useState([])
+  const [acceptedToken, setAcceptedToken] = useState("0x0000000000000000000000000000000000000000")
+  const [minimumDeposit, setMinimumDeposit] = useState("0.001")
 
   const timerRef = useRef(null)
 
@@ -95,15 +97,22 @@ function App() {
       setEndTime(endTimestamp)
       setCurrentRound(round)
 
-      // Calculate startTime from endTime (endTime = startTime + 600)
+      // Fetch actual startTime from contract (don't calculate it)
       if (endTimestamp > 0) {
-        setStartTime(endTimestamp - 600)
+        const contractStartTime = await contract.startTime()
+        setStartTime(Number(contractStartTime))
       } else {
         setStartTime(0)
       }
 
       // Set elapsed time from contract
       setElapsedTime(elapsed)
+
+      // Fetch token validation settings
+      const token = await contract.acceptedToken()
+      const minDeposit = await contract.minimumDeposit()
+      setAcceptedToken(token)
+      setMinimumDeposit(ethers.formatEther(minDeposit))
 
       // Fetch all transactions
       const txs = await contract.getAllTransactions()
@@ -181,6 +190,23 @@ function App() {
               <button className="copy-btn">{copied ? '✓ Copied!' : '📋 Copy'}</button>
             </div>
             <p className="address-note">Click to copy • Send any amount of ETH to participate</p>
+          </div>
+
+          {/* Token Validation Info */}
+          <div className="contract-address-section" style={{ marginTop: '20px' }}>
+            <h3 className="send-instruction">⚙️ GAME REQUIREMENTS</h3>
+            <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <div className="stat-card" style={{ flex: '1', minWidth: '200px' }}>
+                <h3>ACCEPTED TOKEN</h3>
+                <p className="stat-value" style={{ fontSize: '0.9em' }}>
+                  {acceptedToken === "0x0000000000000000000000000000000000000000" ? "Native ETH" : `${acceptedToken.slice(0, 6)}...${acceptedToken.slice(-4)}`}
+                </p>
+              </div>
+              <div className="stat-card" style={{ flex: '1', minWidth: '200px' }}>
+                <h3>MINIMUM DEPOSIT</h3>
+                <p className="stat-value">{minimumDeposit} ETH</p>
+              </div>
+            </div>
           </div>
 
           <div className="round-indicator">
