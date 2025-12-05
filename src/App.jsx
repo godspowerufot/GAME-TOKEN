@@ -3,15 +3,16 @@ import { ethers } from 'ethers'
 import JackpotABI from './Jackpot.json'
 import './App.css'
 
-const CONTRACT_ADDRESS = "0x463d9494DE70839218d9641A38E28d1a01899c51" // With 10% deployer fee
+const CONTRACT_ADDRESS = "0x2a13772E7A6272536665cEBb6F5DB160A3533Fed" // Updated with dead zone timer logic
 const SEPOLIA_RPC = "https://sepolia.infura.io/v3/ae6a607117bb46a3b601aece79638d75" // Public RPC
 
 function App() {
   const [contract, setContract] = useState(null)
-  const [timeLeft, setTimeLeft] = useState(0)
+  const [elapsedTime, setElapsedTime] = useState(0)
   const [players, setPlayers] = useState([])
   const [jackpot, setJackpot] = useState("0")
   const [endTime, setEndTime] = useState(0)
+  const [startTime, setStartTime] = useState(0)
   const [allTransactions, setAllTransactions] = useState([])
   const [currentRound, setCurrentRound] = useState(1)
   const [copied, setCopied] = useState(false)
@@ -31,25 +32,29 @@ function App() {
     }
   }, [contract])
 
-  // Local countdown timer - continuously running
+  // Local elapsed timer - counts up from 0, syncs with contract
   useEffect(() => {
-    if (endTime > 0) {
+    if (startTime > 0) {
       if (timerRef.current) clearInterval(timerRef.current)
 
       timerRef.current = setInterval(() => {
         const now = Math.floor(Date.now() / 1000)
-        const remaining = endTime - now
-        if (remaining <= 0) {
-          setTimeLeft(0)
+        const elapsed = now - startTime
+
+        // Check if game has ended
+        if (endTime > 0 && now >= endTime) {
+          setElapsedTime(endTime - startTime) // Show final elapsed time
           fetchGameState()
         } else {
-          setTimeLeft(remaining)
+          setElapsedTime(elapsed)
         }
       }, 1000)
 
       return () => clearInterval(timerRef.current)
+    } else {
+      setElapsedTime(0)
     }
-  }, [endTime])
+  }, [startTime, endTime])
 
   const initContract = async () => {
     try {
@@ -80,19 +85,24 @@ function App() {
     try {
       const state = await contract.getGameState()
 
-      const tLeft = Number(state[0])
+      const contractElapsedTime = Number(state[0])
       const currentPlayers = state[1]
       const currentJackpot = ethers.formatEther(state[2])
       const endTimestamp = Number(state[3])
       const round = Number(state[4])
+      const startTimestamp = Number(state[5])
 
       setPlayers(currentPlayers)
       setJackpot(currentJackpot)
       setEndTime(endTimestamp)
       setCurrentRound(round)
+      setStartTime(startTimestamp)
 
-      if (tLeft === 0) {
-        setTimeLeft(0)
+      // Sync elapsed time with contract
+      if (startTimestamp > 0) {
+        setElapsedTime(contractElapsedTime)
+      } else {
+        setElapsedTime(0)
       }
 
       // Fetch all transactions
@@ -116,18 +126,30 @@ function App() {
       const filter = contract.filters.WinnersPaid()
       const events = await contract.queryFilter(filter, 0, 'latest')
 
-      const payouts = events.map(event => ({
-        round: Number(event.args.round),
-        winners: event.args.winners,
-        amountPerWinner: ethers.formatEther(event.args.amountPerWinner),
-        blockNumber: event.blockNumber,
-        transactionHash: event.transactionHash
-      }))
+      // Expand each payout event into individual winner entries
+      const allWinnerPayouts = []
+
+      for (const event of events) {
+        const round = Number(event.args.round)
+        const winners = event.args.winners
+        const amountPerWinner = ethers.formatEther(event.args.amountPerWinner)
+        const txHash = event.transactionHash
+
+        // Create an entry for each winner
+        winners.forEach(winner => {
+          allWinnerPayouts.push({
+            round,
+            winner,
+            amount: amountPerWinner,
+            transactionHash: txHash
+          })
+        })
+      }
 
       // Sort by round descending (most recent first)
-      payouts.sort((a, b) => b.round - a.round)
-      setPayoutHistory(payouts)
-      console.log("Payout history:", payouts)
+      allWinnerPayouts.sort((a, b) => b.round - a.round)
+      setPayoutHistory(allWinnerPayouts)
+      console.log("Payout history (expanded):", allWinnerPayouts)
     } catch (error) {
       console.error("Error fetching payout history:", error)
     }
@@ -143,6 +165,11 @@ function App() {
     const m = Math.floor(seconds / 60)
     const s = seconds % 60
     return `${m}:${s.toString().padStart(2, '0')}`
+  }
+
+  // Check if currently in dead zone (9:00-9:59)
+  const isInDeadZone = () => {
+    return elapsedTime >= 540 && elapsedTime < 600 // 9:00 to 9:59
   }
 
   return (
@@ -167,20 +194,25 @@ function App() {
           </div>
 
           <div className="timer-section">
-            <div className={`timer-display ${timeLeft < 60 && endTime > 0 ? 'critical' : ''}`}>
-              {endTime === 0 ? "00:00" : formatTime(timeLeft)}
+            <div className={`timer-display ${isInDeadZone() && startTime > 0 ? 'critical' : ''}`}>
+              {startTime === 0 ? "00:00" : formatTime(elapsedTime)}
             </div>
             <p className="timer-label">
-              {endTime === 0 ? "WAITING FOR FIRST PLAYER" : "TIME REMAINING"}
+              {startTime === 0 ? "WAITING FOR FIRST PLAYER" : "ELAPSED TIME"}
             </p>
 
-            {/* Extension Notice */}
-            {timeLeft < 60 && timeLeft > 0 && endTime > 0 && (
-              <p className="extension-notice">⚡ EXTENSION ZONE ACTIVE (+3s/tx) ⚡</p>
+            {/* Dead Zone Notice - Active during 9:00-9:59 */}
+            {isInDeadZone() && startTime > 0 && (
+              <p className="extension-notice">💀 DEAD ZONE ACTIVE (9:00-9:59) 💀</p>
+            )}
+
+            {/* Show extended end time if in dead zone */}
+            {isInDeadZone() && startTime > 0 && endTime > startTime + 600 && (
+              <p className="waiting-subtext">Game will end at: {formatTime(endTime - startTime)}</p>
             )}
 
             {/* Waiting for Trigger Notice */}
-            {timeLeft === 0 && endTime > 0 && (
+            {startTime > 0 && endTime > 0 && Math.floor(Date.now() / 1000) >= endTime && (
               <div className="waiting-notice-container">
                 <p className="waiting-notice">⏳ ROUND ENDED ⏳</p>
                 <p className="waiting-subtext">Next deposit will trigger payout & start new round!</p>
@@ -188,7 +220,7 @@ function App() {
             )}
 
             {/* Idle Notice */}
-            {endTime === 0 && (
+            {startTime === 0 && (
               <p className="waiting-notice">🚀 SEND ETH TO START ROUND 1 🚀</p>
             )}
           </div>
@@ -201,8 +233,9 @@ function App() {
             <div className="stat-card">
               <h3>PAYOUT / WINNER</h3>
               <p className="stat-value">
-                {players.length > 0 ? (Number(jackpot) / Math.min(players.length, 5)).toFixed(6) : "0.0"} ETH
+                {players.length > 0 ? ((Number(jackpot) * 0.9) / Math.min(players.length, 5)).toFixed(6) : "0.0"} ETH
               </p>
+              <p style={{ fontSize: '0.7em', opacity: 0.7, marginTop: '4px' }}>(After 10% fee)</p>
             </div>
           </div>
 
@@ -325,27 +358,22 @@ function App() {
                 <table>
                   <thead>
                     <tr>
+                      <th>#</th>
                       <th>Round</th>
-                      <th>Winners</th>
-                      <th>Amount/Winner</th>
+                      <th>Winner</th>
+                      <th>Amount</th>
                       <th>Tx Hash</th>
                     </tr>
                   </thead>
                   <tbody>
                     {payoutHistory.map((payout, i) => (
                       <tr key={i} className="transaction-row">
+                        <td className="tx-rank">#{i + 1}</td>
                         <td className="tx-round">R{payout.round}</td>
                         <td className="tx-addr">
-                          {payout.winners.length} player{payout.winners.length > 1 ? 's' : ''}
-                          <div style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '4px' }}>
-                            {payout.winners.map((winner, j) => (
-                              <div key={j}>
-                                {winner.slice(0, 6)}...{winner.slice(-4)}
-                              </div>
-                            ))}
-                          </div>
+                          {payout.winner.slice(0, 6)}...{payout.winner.slice(-4)}
                         </td>
-                        <td className="tx-amount">{Number(payout.amountPerWinner).toFixed(4)} ETH</td>
+                        <td className="tx-amount">{Number(payout.amount).toFixed(4)} ETH</td>
                         <td className="tx-time">
                           <a
                             href={`https://sepolia.etherscan.io/tx/${payout.transactionHash}`}
