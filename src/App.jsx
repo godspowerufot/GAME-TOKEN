@@ -179,7 +179,7 @@ function App() {
   return (
     <div className="app-container">
       <div className="glass-panel">
-        <h1 className="title">💎 ETHER JACKPOT 💎</h1>
+        <h1 className="title">✨ TOUCH GAME ✨</h1>
 
         <div className="game-content">
           {/* Contract Address Display */}
